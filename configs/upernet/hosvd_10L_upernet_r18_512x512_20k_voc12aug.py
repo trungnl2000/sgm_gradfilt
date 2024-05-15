@@ -9,14 +9,14 @@ freeze_layers = [
 hosvd_var = dict(
     enable=True,
     filter_install=[
-        dict(path="decode_head.fpn_bottleneck", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.fpn_convs.0", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.fpn_convs.1", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.fpn_convs.2", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.lateral_convs.0", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.lateral_convs.1", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.lateral_convs.2", type='cbr', SVD_var=0.8),
-        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.8),
+        dict(path="decode_head.fpn_bottleneck", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.fpn_convs.0", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.fpn_convs.1", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.fpn_convs.2", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.lateral_convs.0", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.lateral_convs.1", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.lateral_convs.2", type='cbr', SVD_var=0.9),
+        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.9),
     ]
 )
 

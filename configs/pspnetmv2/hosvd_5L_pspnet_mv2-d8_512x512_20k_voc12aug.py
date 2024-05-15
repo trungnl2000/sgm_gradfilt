@@ -5,6 +5,6 @@ freeze_layers = ["backbone"]
 hosvd_var = dict(
     enable=True,
     filter_install=[
-        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.8),
+        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.9),
     ]
 )

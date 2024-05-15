@@ -8,8 +8,8 @@ freeze_layers = [
 hosvd_var = dict(
     enable=True,
     filter_install=[
-        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.8),
-        dict(path="backbone.layer4.1", type='resnet_basic_block', SVD_var=0.8),
-        dict(path="backbone.layer4.0", type='resnet_basic_block', SVD_var=0.8),
+        dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.9),
+        dict(path="backbone.layer4.1", type='resnet_basic_block', SVD_var=0.9),
+        dict(path="backbone.layer4.0", type='resnet_basic_block', SVD_var=0.9),
     ]
 )
