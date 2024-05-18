@@ -29,7 +29,7 @@ mv data ./../
 
 cd ..
 
-rm -r benchmark_RELEASE benchmark.tgz
+rm -r benchmark_RELEASE
 ```
 Fix lỗi "TypeError: FormatCode() got an unexpected keyword argument 'verify'"
 
