@@ -9,7 +9,7 @@ freeze_layers = [
     "~backbone.layer4.0.conv1",
 ]
 
-hosvd_var = dict(
+svd_var = dict(
     enable=True,
     filter_install=[
         dict(path="decode_head.bottleneck", type='cbr', SVD_var=0.9),

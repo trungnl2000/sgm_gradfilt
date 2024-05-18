@@ -20,7 +20,7 @@ from mmseg.models import build_segmentor
 from mmseg.utils import (collect_env, get_device, get_root_logger,
                          setup_multi_processes)
 
-from custom_op.register import register_filter, register_HOSVD_with_var
+from custom_op.register import register_filter, register_HOSVD_with_var, register_SVD_with_var
 from functools import reduce
 from custom_op.conv_avg import Conv2dAvg
 import torch.nn as nn
@@ -201,6 +201,12 @@ def main():
         cfg.hosvd_var = dict(
             enable=False
         )
+    
+    if cfg.get("svd_var", None) is None:
+        cfg.svd_var = dict(
+            enable=False
+        )
+
     if cfg.get("freeze_layers", None) is None:
         cfg.freeze_layers = []
 
@@ -255,6 +261,10 @@ def main():
     elif cfg.hosvd_var.enable:
         logger.info("Install HOSVD with variance")
         register_HOSVD_with_var(model, cfg.hosvd_var)
+    
+    elif cfg.svd_var.enable:
+        logger.info("Install SVD with variance")
+        register_SVD_with_var(model, cfg.svd_var)
 
     for layer_path in cfg.freeze_layers:
         active = layer_path[0] == '~'
