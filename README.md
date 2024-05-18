@@ -31,3 +31,6 @@ cd ..
 
 rm -r benchmark_RELEASE benchmark.tgz
 ```
+Fix lỗi "TypeError: FormatCode() got an unexpected keyword argument 'verify'"
+
+`pip install yapf==0.40.1`
