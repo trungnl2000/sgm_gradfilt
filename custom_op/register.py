@@ -84,7 +84,7 @@ def add_hook_for_base_conv(module: nn.Module, cfg, hook):
     return module
 
 ###############################################################################
-def register_filter(module, cfgs, hook):
+def register_filter(module, cfgs, hook=None):
     filter_install_cfgs = cfgs['filter_install']
     logging.info("Registering Filter")
     if not isinstance(filter_install_cfgs, list):
@@ -104,7 +104,7 @@ def register_filter(module, cfgs, hook):
         parent = reduce(getattr, path_seq[:-1], module)
         setattr(parent, path_seq[-1], upd_layer)
 
-def register_HOSVD_with_var(module, cfgs, hook):
+def register_HOSVD_with_var(module, cfgs, hook=None):
     filter_install_cfgs = cfgs['filter_install']
     logging.info("Registering Filter")
     if not isinstance(filter_install_cfgs, list):
@@ -125,7 +125,7 @@ def register_HOSVD_with_var(module, cfgs, hook):
         parent = reduce(getattr, path_seq[:-1], module)
         setattr(parent, path_seq[-1], upd_layer)
 
-def register_SVD_with_var(module, cfgs, hook):
+def register_SVD_with_var(module, cfgs, hook=None):
     filter_install_cfgs = cfgs['filter_install']
     logging.info("Registering Filter")
     if not isinstance(filter_install_cfgs, list):
@@ -148,7 +148,7 @@ def register_SVD_with_var(module, cfgs, hook):
 
 
 
-def attach_hook_for_base_conv(module, cfgs, hook):
+def attach_hook_for_base_conv(module, cfgs, hook=None):
     filter_install_cfgs = cfgs['filter_install']
     if not isinstance(filter_install_cfgs, list):
         logging.info("No Filter Required")

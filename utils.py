@@ -36,4 +36,6 @@ class Hook: # Lưu lại các input/output size của mô hình
         # print("Hook is removed")
 
 def attach_hooks_for_conv(module, name, hook, special_param=None):
+    if hook == None:
+        return
     hook[name] = Hook(module, special_param)
