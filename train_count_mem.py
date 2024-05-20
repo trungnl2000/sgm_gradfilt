@@ -1,3 +1,4 @@
+# File dùng để đếm memory
 """
 Cách dùng:
 Tạo một tệp "data/VOCdevkit/VOC2012/ImageSets/Segmentation/val copy.txt"
@@ -284,6 +285,12 @@ def main():
     
     elif cfg.base.enable:
         attach_hook_for_base_conv(model, cfg.base, hook)
+    else:
+        from utils import attach_hooks_for_conv
+        for name, mod in model.named_modules():
+            if isinstance(mod, nn.modules.conv.Conv2d):
+                attach_hooks_for_conv(module=mod, name=name, hook=hook)
+
     
     for layer_path in cfg.freeze_layers:
         active = layer_path[0] == '~'

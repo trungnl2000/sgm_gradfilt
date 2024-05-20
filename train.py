@@ -1,3 +1,4 @@
+# File train gốc, đổi tên lại thành train.py khi dùng để train
 # Copyright (c) OpenMMLab. All rights reserved.
 import argparse
 import copy
