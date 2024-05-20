@@ -1,6 +1,7 @@
 Install requirement:
 ```
 pip install scipy
+pip install gdown
 ```
 Fix lỗi "TypeError: FormatCode() got an unexpected keyword argument 'verify'"
 
@@ -26,5 +27,11 @@ python tools/convert_datasets/voc_aug.py data/VOCdevkit data/VOCdevkit/VOCaug --
 mv data ./../
 cd ..
 rm -r benchmark_RELEASE
+```
+Prepare checkpoint
+```
+gdown https://drive.google.com/uc?id=1CxLWBcByKFS-Vv75VG70DWUX3EcFmSu1
+tar xvf seg_calib_ckpt.tar.gz
+rm seg_calib_ckpt.tar.gz
 ```
 
