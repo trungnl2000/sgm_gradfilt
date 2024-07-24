@@ -55,11 +55,14 @@ def restore_tensor(Uk_Sk, Vk_t, shape):
 class Conv2dSVDop_with_var(Function):
     @staticmethod
     def forward(ctx: Any, *args: Any, **kwargs: Any) -> Any:
-        input, weight, bias, stride, dilation, padding, groups, var = args
+        input, weight, bias, stride, dilation, padding, groups, var, svd_size = args
 
         output = conv2d(input, weight, bias, stride, padding, dilation=dilation, groups=groups) # Chỗ này như bình thường
 
         input_Uk_Sk, input_Vk_t = truncated_svd(input, var=var)
+        if svd_size is not None:
+            svd_size.append(th.tensor([input_Uk_Sk.shape[0], input_Vk_t.shape[0], input_Vk_t.shape[1]], device=input_Uk_Sk.device))
+
         ctx.save_for_backward(input_Uk_Sk, input_Vk_t, th.tensor(input.shape), weight, bias)
 
         ctx.stride = stride
@@ -88,7 +91,7 @@ class Conv2dSVDop_with_var(Function):
             grad_weight = nn.grad.conv2d_weight(input, weight.shape, grad_output, stride, padding, dilation, groups)
         if bias is not None and ctx.needs_input_grad[2]:
             grad_bias = grad_output.sum((0,2,3)).squeeze(0)
-        return grad_input, grad_weight, grad_bias, None, None, None, None, None # Trả về gradient ứng với cái arg ở forward
+        return grad_input, grad_weight, grad_bias, None, None, None, None, None, None # Trả về gradient ứng với cái arg ở forward
 
 class Conv2dSVD_with_var(nn.Conv2d):
     def __init__(
@@ -104,7 +107,8 @@ class Conv2dSVD_with_var(nn.Conv2d):
             device=None,
             dtype=None,
             activate=False,
-            var=1
+            var=1,
+            svd_size=None
     ) -> None:
         if kernel_size is int:
             kernel_size = [kernel_size, kernel_size]
@@ -126,16 +130,17 @@ class Conv2dSVD_with_var(nn.Conv2d):
                                         dtype=dtype)
         self.activate = activate
         self.var = var
+        self.svd_size = svd_size
 
     def forward(self, x: th.Tensor) -> th.Tensor:
         # x, weight, bias, stride, padding, order, groups = args
         if self.activate:
-            y = Conv2dSVDop_with_var.apply(x, self.weight, self.bias, self.stride, self.dilation, self.padding, self.groups, self.var)
+            y = Conv2dSVDop_with_var.apply(x, self.weight, self.bias, self.stride, self.dilation, self.padding, self.groups, self.var, self.svd_size)
         else:
             y = super().forward(x)
         return y
 
-def wrap_convSVD_with_var_layer(conv, SVD_var, active):
+def wrap_convSVD_with_var_layer(conv, SVD_var, active, svd_size=None):
     new_conv = Conv2dSVD_with_var(in_channels=conv.in_channels,
                          out_channels=conv.out_channels,
                          kernel_size=conv.kernel_size,
@@ -145,7 +150,8 @@ def wrap_convSVD_with_var_layer(conv, SVD_var, active):
                          groups=conv.groups,
                          padding=conv.padding,
                          activate=active,
-                         var=SVD_var
+                         var=SVD_var,
+                         svd_size=svd_size
                          )
     new_conv.weight.data = conv.weight.data
     if new_conv.bias is not None:

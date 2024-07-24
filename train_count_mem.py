@@ -2,9 +2,12 @@
 """
 Cách dùng:
 Tạo một tệp "data/VOCdevkit/VOC2012/ImageSets/Segmentation/val copy.txt"
-Sau đó xóa hết, chỉ để lại 1 dòng => nghĩa là chỉ dùng 1 data duy nhất cho validation
+Sau đó xóa hết, chỉ để lại 1 dòng => nghĩa là chỉ dùng 1 data duy nhất cho validation => Vì sẽ đo activation memory dựa trên train data => (fix: không cần nữa, chỉ cần set train_segmentor(validate=False))
 Sửa đường dẫn val = dict ... ở trong file 'mmsegmentation/configs/_base_/datasets/pascal_voc12.py' bằng đường dẫn đến file trên
-Sửa số epoch trong 'mmsegmentation/configs/_base_/schedules/schedule_20k.py' bằng số lần mình muốn test, tức là nếu train 10 epoch thì hosvd và svd sẽ dùng data của 10 epoch này để tính ra kích thước trung bình
+Sửa số epoch trong 'mmsegmentation/configs/_base_/schedules/schedule_20k.py' bằng số lần mình muốn test, tức là nếu train 10 epoch thì hosvd và svd sẽ dùng data của 10 epoch này để tính ra kích thước trung bình:
+    cụ thể: runner = dict(type='IterBasedRunner', max_iters=1000) là số epoch train
+            checkpoint_config = dict(by_epoch=False, interval=100) là sau mỗi bao nhiêu epoch thì lưu checkpoint
+            evaluation = dict(interval=100, metric='mIoU', pre_eval=True) là sau mỗi epoch thì evaluate
 """
 
 # Copyright (c) OpenMMLab. All rights reserved.
@@ -150,9 +153,8 @@ def get_latest_log_version(path):
     return max_version + 1
 
 
-def main():
-    args = parse_args()
-
+def get_memory(link, args):
+    args.load_from = link
     cfg = Config.fromfile(args.config)
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
@@ -161,15 +163,9 @@ def main():
     if cfg.get('cudnn_benchmark', False):
         torch.backends.cudnn.benchmark = True
 
-    # work_dir is determined in this priority: CLI > segment in file > filename
-    work_dir = './runs'
-    postfix = f"_{args.log_postfix}" if args.log_postfix != "" else ""
-    log_name = osp.splitext(osp.basename(args.config))[0] + postfix
-    if args.work_dir is not None:
-        work_dir = args.work_dir
-    work_dir = osp.join(work_dir, log_name)
-    max_version = get_latest_log_version(work_dir)
-    work_dir = osp.join(work_dir, f"version_{max_version}")
+    work_dir = osp.dirname(link)
+    work_dir = osp.join(work_dir, 'mem_log')
+    work_dir = osp.join(work_dir, 'delete')
     cfg.work_dir = work_dir
 
     if args.load_from is not None:
@@ -276,12 +272,16 @@ def main():
         register_filter(model, cfg.gradient_filter, hook)
     
     elif cfg.hosvd_var.enable:
+        num_of_finetune = len(cfg.hosvd_var['filter_install'])
+        cfg.hosvd_var["k_hosvd"] = [[], [], [], [], []]
         # logger.info("Install HOSVD with variance")
-        register_HOSVD_with_var(model, cfg.hosvd_var, hook)
+        register_HOSVD_with_var(model, cfg.hosvd_var)
 
     elif cfg.svd_var.enable:
+        num_of_finetune = len(cfg.svd_var['filter_install'])
+        cfg.svd_var["svd_size"] = []
         # logger.info("Install SVD with variance")
-        register_SVD_with_var(model, cfg.svd_var, hook)
+        register_SVD_with_var(model, cfg.svd_var)
     
     elif cfg.base.enable:
         attach_hook_for_base_conv(model, cfg.base, hook)
@@ -346,73 +346,91 @@ def main():
         datasets,
         cfg,
         distributed=distributed,
-        validate=True,
+        validate=False,
         timestamp=timestamp,
         meta=meta)
 
     if args.collect_moment:
         moments = [model.moment1, model.moment2]
         torch.save(moments, osp.join(cfg.work_dir, f"moment_log_{timestamp}"))
-    
-    from custom_op.conv_hosvd_with_var import Conv2dHOSVD_with_var
-    from custom_op.conv_svd_with_var import Conv2dSVD_with_var
-    from math import ceil
-    num_element = 0
-    for name in hook:
-        hook[name].inputs.pop() # Bỏ đi phần tử cuối cùng, do nó thuộc validation data nên batch = 1
-        
-        if isinstance(hook[name].module, Conv2dAvg):
-            print(name, "  :  ", hook[name].module)
-            input_size = torch.tensor(hook[name].inputs[0].shape).clone().detach()
-            stride = hook[name].module.stride
-            x_h, x_w = input_size[-2:]
-            output_size = hook[name].outputs[0].shape
-            h, w = output_size[-2:]
 
-            filt_radius = hook[name].special_param
+    # Đo trên tập train:
 
-            p_h, p_w = ceil(h / filt_radius), ceil(w / filt_radius)
-            x_order_h, x_order_w = filt_radius * stride[0], filt_radius * stride[1]
-            x_pad_h, x_pad_w = ceil((p_h * x_order_h - x_h) / 2), ceil((p_w * x_order_w - x_w) / 2)
-
-            x_sum_height = ((x_h + 2 * x_pad_h - x_order_h) // x_order_h) + 1
-            x_sum_width = ((x_w + 2 * x_pad_w - x_order_w) // x_order_w) + 1
-
-            num_element += int(input_size[0] * input_size[1] * x_sum_height * x_sum_width)
-
-            # print(name, ": ", self.hook[name].module, " ----- ",int(input_size[0] * input_size[1] * x_sum_height * x_sum_width))
-
-        elif isinstance(hook[name].module, Conv2dHOSVD_with_var):
-            print(name, "  :  ", hook[name].module)
-            SVD_var = hook[name].special_param
-
-            from custom_op.conv_hosvd_with_var import hosvd
-            num_element_all = 0
-            for input in hook[name].inputs:
-                S, u0, u1, u2, u3 = hosvd(input, var=SVD_var)
-                num_element_all += S.numel() + u0.numel() + u1.numel() + u2.numel() + u3.numel()
-            num_element += num_element_all/len(hook[name].inputs)
-
-        elif isinstance(hook[name].module, Conv2dSVD_with_var):
-            print(name, "  :  ", hook[name].module)
-            SVD_var = hook[name].special_param
-            ############## Kiểu reshape activation map theo dim
-            from custom_op.conv_svd_with_var import truncated_svd
-            num_element_all = 0
-            for input in hook[name].inputs:
-                Uk_Sk, Vk_t = truncated_svd(input, var=SVD_var)
-                num_element_all += Uk_Sk.numel() + Vk_t.numel()
-            num_element += num_element_all/len(hook[name].inputs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if cfg.svd_var.enable:
+            svd_size_tensor= torch.stack(cfg.svd_var['svd_size']).t().float() # Chiều 1: 3 kích thước của các thành phần; chiều 2 từng batch của tất cả layer
+            svd_size_tensor = svd_size_tensor.view(3, -1, num_of_finetune) # Shape: 3 kích thước của các thành phần, số batch, num_of_finetune
+            svd_size_tensor = svd_size_tensor.permute(2, 1, 0) # Shape: num_of_finetune, số batch, 3 kích thước của các thành phần
+            # Tính trung bình của mỗi layer
+            num_element_all = torch.mean(svd_size_tensor[:, :, 0] * svd_size_tensor[:, :, 1] + svd_size_tensor[:, :, 1] * svd_size_tensor[:, :, 2], dim=1)
+            # Tổng hợp các giá trị trung bình của mỗi layer
+            num_element = torch.sum(num_element_all)
 
             
-        elif isinstance(hook[name].module, nn.modules.conv.Conv2d):
-            print(name, "  :  ", hook[name].module)
-            num_element += hook[name].inputs[0].numel() # Lấy phần tử đầu tiên thôi (các phần tử sau y hệt kích thước)
+            mem = (num_element*4)#/(1024*1024)
+            with open(os.path.join(osp.dirname(work_dir), "activation_memory_Byte.log"), "a") as file:
+                file.write(osp.basename(link) + "\t" + str(float(mem)) + "\n")
 
-    element_size=4
-    print("Activation memory: ", str(num_element*element_size) + " Bytes")
+    elif cfg.hosvd_var.enable:
+        k_hosvd_tensor = torch.tensor(cfg.hosvd_var["k_hosvd"][:4], device=device).float() # Chiều 1: dimension (4 cái k); chiều 2: k của từng batch của tất cả layer
+        k_hosvd_tensor = k_hosvd_tensor.view(4, -1, num_of_finetune) # Shape: 4 cái k, số batch, num_of_finetune
+        k_hosvd_tensor = k_hosvd_tensor.permute(2, 1, 0) # Shape: num_of_finetune, số batch, 4 cái k
 
+        raw_shapes = torch.tensor(cfg.hosvd_var["k_hosvd"][4], device=device).reshape(-1, num_of_finetune, 4) # Shape: num of batch, num_of_finetune, 4 chiều
+        raw_shapes = raw_shapes.permute(1, 0, 2) # Shape: num_of_finetune, num of batch, 4 chiều
+        
+        num_element_all = torch.sum(
+            k_hosvd_tensor[:, :, 0] * k_hosvd_tensor[:, :, 1] * k_hosvd_tensor[:, :, 2] * k_hosvd_tensor[:, :, 3]
+            + k_hosvd_tensor[:, :, 0] * raw_shapes[:, :, 0]
+            + k_hosvd_tensor[:, :, 1] * raw_shapes[:, :, 1]
+            + k_hosvd_tensor[:, :, 2] * raw_shapes[:, :, 2]
+            + k_hosvd_tensor[:, :, 3] * raw_shapes[:, :, 3],
+            dim=1
+        )
+        num_element = torch.sum(num_element_all) / k_hosvd_tensor.shape[1]
+        mem = (num_element*4)#/(1024*1024)
+        with open(os.path.join(osp.dirname(work_dir), "activation_memory_Byte.log"), "a") as file:
+            file.write(osp.basename(link) + "\t" + str(float(mem)) + "\n")
+    
+    
+
+
+import re
+def find_checkpoint():
+    args = parse_args()
+
+    experiment_dir = './runs'
+    postfix = f"_{args.log_postfix}" if args.log_postfix != "" else ""
+    log_name = osp.splitext(osp.basename(args.config))[0] + postfix
+    experiment_dir = osp.join(experiment_dir, log_name)
+
+
+    checkpoints = []
+    def process_directory(current_directory):
+        # Duyệt qua tất cả các mục trong thư mục hiện tại
+        for entry in sorted(os.listdir(current_directory)):
+            entry_path = os.path.join(current_directory, entry)
+            if 'iter' in entry:
+                checkpoints.append(entry_path)
+            elif os.path.isdir(entry_path):
+                # Nếu là thư mục, gọi đệ quy để xử lý thư mục con
+                process_directory(entry_path)
+    # Bắt đầu từ thư mục gốc
+    process_directory(experiment_dir)
+    # Trích xuất số từ tên file và sắp xếp
+    def extract_number(filepath):
+        filename = os.path.basename(filepath)
+        match = re.search(r'iter_(\d+)', filename)
+        return int(match.group(1)) if match else -1
+
+    checkpoints.sort(key=extract_number)
+
+    # In ra các tên file đã được sắp xếp
+    for checkpoint in checkpoints:
+        # print(checkpoint)
+        get_memory(checkpoint, args)
 
 if __name__ == '__main__':
-    print("Train script")
-    main()
+    # print("Train script")
+    # main()
+    find_checkpoint()

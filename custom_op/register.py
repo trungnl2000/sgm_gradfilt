@@ -33,40 +33,26 @@ def add_grad_filter(module: nn.Module, cfg, hook):
         raise NotImplementedError
     return module
 
-def add_hosvd_with_var_filter(module: nn.Module, cfg, hook):
+def add_hosvd_with_var_filter(module: nn.Module, cfg):
     if cfg['type'] == 'cbr':
-        module.conv = wrap_convHOSVD_with_var_layer(module.conv, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module.conv, name=cfg['path']+'.conv', hook=hook, special_param=cfg['SVD_var'])
+        module.conv = wrap_convHOSVD_with_var_layer(module.conv, cfg['SVD_var'], True, cfg["k_hosvd"])
     elif cfg['type'] == 'resnet_basic_block':
-        module.conv1 = wrap_convHOSVD_with_var_layer(module.conv1, cfg['SVD_var'], True)
-        module.conv2 = wrap_convHOSVD_with_var_layer(module.conv2, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module.conv1, name=cfg['path']+'.conv1', hook=hook, special_param=cfg['SVD_var'])
-        attach_hooks_for_conv(module=module.conv2, name=cfg['path']+'.conv2', hook=hook, special_param=cfg['SVD_var'])
+        module.conv1 = wrap_convHOSVD_with_var_layer(module.conv1, cfg['SVD_var'], True, cfg["k_hosvd"])
+        module.conv2 = wrap_convHOSVD_with_var_layer(module.conv2, cfg['SVD_var'], True, cfg["k_hosvd"])
     elif cfg['type'] == 'conv':
-        module = wrap_convHOSVD_with_var_layer(module, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module, name=cfg['path'], hook=hook, special_param=cfg['SVD_var'])
+        module = wrap_convHOSVD_with_var_layer(module, cfg['SVD_var'], True, cfg["k_hosvd"])
     else:
         raise NotImplementedError
     return module
 
-def add_svd_with_var_filter(module: nn.Module, cfg, hook):
+def add_svd_with_var_filter(module: nn.Module, cfg):
     if cfg['type'] == 'cbr':
-        module.conv = wrap_convSVD_with_var_layer(module.conv, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module.conv, name=cfg['path']+'.conv', hook=hook, special_param=cfg['SVD_var'])
+        module.conv = wrap_convSVD_with_var_layer(module.conv, cfg['SVD_var'], True, cfg["svd_size"])
     elif cfg['type'] == 'resnet_basic_block':
         module.conv1 = wrap_convSVD_with_var_layer(module.conv1, cfg['SVD_var'], True)
         module.conv2 = wrap_convSVD_with_var_layer(module.conv2, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module.conv1, name=cfg['path']+'.conv1', hook=hook, special_param=cfg['SVD_var'])
-        attach_hooks_for_conv(module=module.conv2, name=cfg['path']+'.conv2', hook=hook, special_param=cfg['SVD_var'])
     elif cfg['type'] == 'conv':
-        module = wrap_convSVD_with_var_layer(module, cfg['SVD_var'], True)
-
-        attach_hooks_for_conv(module=module, name=cfg['path'], hook=hook, special_param=cfg['SVD_var'])
+        module = wrap_convSVD_with_var_layer(module, cfg['SVD_var'], True, cfg["svd_size"])
     else:
         raise NotImplementedError
     return module
@@ -104,7 +90,7 @@ def register_filter(module, cfgs, hook=None):
         parent = reduce(getattr, path_seq[:-1], module)
         setattr(parent, path_seq[-1], upd_layer)
 
-def register_HOSVD_with_var(module, cfgs, hook=None):
+def register_HOSVD_with_var(module, cfgs):
     filter_install_cfgs = cfgs['filter_install']
     logging.info("Registering Filter")
     if not isinstance(filter_install_cfgs, list):
@@ -119,13 +105,18 @@ def register_HOSVD_with_var(module, cfgs, hook=None):
         for k in DEFAULT_CFG.keys():
             if k not in cfg.keys():
                 cfg[k] = DEFAULT_CFG[k]
+        if 'k_hosvd' in cfgs:
+            cfg['k_hosvd'] = cfgs['k_hosvd']
+        else:
+            cfg['k_hosvd'] = None
+
         path_seq = cfg['path'].split('.')
         target = reduce(getattr, path_seq, module)
-        upd_layer = add_hosvd_with_var_filter(target, cfg, hook)
+        upd_layer = add_hosvd_with_var_filter(target, cfg)
         parent = reduce(getattr, path_seq[:-1], module)
         setattr(parent, path_seq[-1], upd_layer)
 
-def register_SVD_with_var(module, cfgs, hook=None):
+def register_SVD_with_var(module, cfgs):
     filter_install_cfgs = cfgs['filter_install']
     logging.info("Registering Filter")
     if not isinstance(filter_install_cfgs, list):
@@ -140,9 +131,13 @@ def register_SVD_with_var(module, cfgs, hook=None):
         for k in DEFAULT_CFG.keys():
             if k not in cfg.keys():
                 cfg[k] = DEFAULT_CFG[k]
+        if 'svd_size' in cfgs:
+            cfg['svd_size'] = cfgs['svd_size']
+        else:
+            cfg['svd_size'] = None
         path_seq = cfg['path'].split('.')
         target = reduce(getattr, path_seq, module)
-        upd_layer = add_svd_with_var_filter(target, cfg, hook)
+        upd_layer = add_svd_with_var_filter(target, cfg)
         parent = reduce(getattr, path_seq[:-1], module)
         setattr(parent, path_seq[-1], upd_layer)
 
